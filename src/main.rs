@@ -38,6 +38,7 @@ mod config {
     impl Cfg {
         // TODO: Handle negative numbers -5 etc...
         // TODO: Handle --
+        // TODO: Handle double/triple flags
         pub fn parse(args: impl Iterator<Item = impl ToString>) -> anyhow::Result<Self> {
             let mut args = args.map(|s| s.to_string());
 
@@ -48,14 +49,14 @@ mod config {
                 if s.starts_with("--") {
                     let complement = args
                         .next()
-                        .context(format!("No complement for option {s}"))?;
+                        .with_context(|| format!("No complement for option {s}"))?;
                     options.register(s, Some(complement));
                 } else if s.starts_with('-') {
                     for c in s.chars().skip(1) {
                         options.register(format!("-{c}"), None);
                     }
                 } else if !s.is_empty() {
-                    verbs.push(s.clone());
+                    verbs.push(s);
                 }
             }
 
