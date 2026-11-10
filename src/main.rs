@@ -36,23 +36,20 @@ mod config {
     }
 
     impl Cfg {
-        // TODO: I hate this function so much REFACTOR
         // TODO: Handle negative numbers -5 etc...
         // TODO: Handle --
         pub fn parse(args: impl Iterator<Item = impl ToString>) -> anyhow::Result<Self> {
-            let args: Vec<String> = args.map(|s| s.to_string()).collect();
+            let mut args = args.map(|s| s.to_string());
 
             let mut verbs: Vec<String> = vec![];
             let mut options = CfgOptions::new();
 
-            let mut index = 0;
-            while let Some(s) = args.get(index) {
-                if s.as_str().starts_with("--") {
+            while let Some(s) = args.next() {
+                if s.starts_with("--") {
                     let complement = args
-                        .get(index + 1)
+                        .next()
                         .context(format!("No complement for option {s}"))?;
-                    options.register(s.clone(), Some(complement.clone()));
-                    index += 1;
+                    options.register(s, Some(complement));
                 } else if s.starts_with('-') {
                     for c in s.chars().skip(1) {
                         options.register(format!("-{c}"), None);
@@ -60,8 +57,6 @@ mod config {
                 } else if !s.is_empty() {
                     verbs.push(s.clone());
                 }
-
-                index += 1;
             }
 
             Ok(Self { verbs, options })
