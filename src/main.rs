@@ -1,8 +1,12 @@
+/// CfgOptions is a HashMap<String, Option<String>> where T is "-q"  or "--long" and U
 mod config {
+    use core::fmt;
     use std::cell::RefCell;
     use std::collections::HashMap;
 
     use anyhow::Context;
+
+    use crate::config::CfgError::ExpectedLongOption;
 
     #[derive(Debug)]
     struct CfgOptions(RefCell<HashMap<String, Option<String>>>); // Is this idiomatic?????????
@@ -13,20 +17,33 @@ mod config {
             Self(RefCell::from(HashMap::default()))
         }
 
-        fn from(h: HashMap<String, Option<String>>) -> Self {
-            Self(RefCell::from(h))
-        }
+        // fn from(h: HashMap<String, Option<String>>) -> Self {
+        //     Self(RefCell::from(h))
+        // }
 
         fn register(&self, k: String, v: Option<String>) -> Option<Option<String>> {
             self.0.borrow_mut().insert(k, v)
         }
 
         // TODO: FEATURE: Add a method to get unused optionks so far WITHOUT REMOVING
-        /// consumes the option
         fn get(&self, k: &String) -> Option<Option<String>> {
             self.0.borrow_mut().remove(k)
         }
     }
+
+    #[derive(Debug)]
+    pub enum CfgError {
+        ExpectedLongOption,
+    }
+
+    impl fmt::Display for CfgError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            match self {
+                ExpectedLongOption => write!(f, "Tried to query a short option as a long option"),
+            }
+        }
+    }
+    impl std::error::Error for CfgError {}
 
     // TODO: Doc test rust
     // Ex: doku version -q --kitten meow -> Cfg{ verbs: ["version"], options: {"-q": None, "meow": Some("Kitten")}}
@@ -51,7 +68,6 @@ mod config {
                         .context("No complement for option {s}")?;
                     options.register(s.clone(), Some(complement.clone()));
                     index += 1;
-                    continue;
                 } else if s.starts_with('-') {
                     options.register(s.clone(), None);
                 } else {
@@ -64,18 +80,98 @@ mod config {
             Ok(Self { verbs, options })
         }
 
-        pub fn get_option(&mut self, key: &String) -> Option<Option<String>> {
-            self.options.get(key)
+        // TODO: ARE WE SURE ABOUT RETURNING AN OPTION<BOOL> FOR THIS??????
+        pub fn get_short_option(&self, key: &str) -> Option<()> {
+            let key = key.to_string();
+
+            self.options.get(&key).map(|_| ())
+        }
+        pub fn get_long_option(&self, key: &str) -> Option<String> {
+            let key = key.to_string();
+
+            self.options.get(&key).map(|o_s| {
+                o_s.expect(
+                    "LOGIC ERROR in CfgOptions: Tried to query a short option as a long option",
+                )
+            })
         }
     }
 
-    // #[cfg(test)]
-    // mod tests {
-    //     use super::*;
+    #[cfg(test)]
+    mod tests {
+        use super::*;
 
-    //     #[test]
-    //     fn test1() {}
-    // }
+        fn create_test_cfg() -> Cfg {
+            let cmd = "firstverb -q secondverb --long complement".to_string();
+            Cfg::parse(cmd.split(' ')).unwrap()
+        }
+
+        // TODO: TEST CFG PARSING
+        #[test]
+        fn test_cfg_parsing() {
+            let cfg = create_test_cfg();
+
+            // Test verbs
+            assert_eq!(
+                cfg.verbs,
+                vec!["firstverb".to_string(), "secondverb".to_string()]
+            );
+
+            // Test options
+            let hm = cfg.options.0.into_inner();
+            assert_eq!(
+                *hm.get("-q")
+                    .expect("Could not find -q in CfgOptions when it should be there"),
+                None
+            );
+
+            assert_eq!(
+                *hm.get("--long")
+                    .expect("Could not find --long in CfgOptions when it should be there"),
+                Some("complement".to_string())
+            )
+        }
+        #[test]
+        fn test_cfg_options() {
+            let cfg = create_test_cfg();
+
+            cfg.get_short_option("-q")
+                .expect("Should have been able to find short option -q");
+
+            let complement = cfg
+                .get_long_option("--long")
+                .expect("Should have been able to find long option --long");
+            assert_eq!(complement.as_str(), "complement")
+        }
+        // #[test]
+        // fn test_cfgoptions_short_option() {
+        //     let cfgoptions = CfgOptions::new();
+
+        //     cfgoptions.register("-q".into(), None);
+
+        //     let option = cfgoptions
+        //         .get(&"-q".into())
+        //         .expect("Could not retrive Option from CfgOptions");
+        //     assert_eq!(option, None);
+
+        //     let fake_option = cfgoptions.get(&"-q".into());
+        //     assert_eq!(fake_option, None);
+        // }
+        // #[test]
+        // fn test_cfgoptions_long_option() {
+        //     let cfgoptions = CfgOptions::new();
+
+        //     cfgoptions.register("--long".into(), Some("complement".into()));
+
+        //     let option = cfgoptions
+        //         .get(&"--long".into())
+        //         .expect("Could not retrive Option from CfgOptions");
+        //     assert_eq!(option, Some("complement".to_string()));
+
+        //     let fake_option = cfgoptions.get(&"--fake".into());
+        //     assert_eq!(fake_option, None);
+        // }
+    }
 }
 
 use std::env;
