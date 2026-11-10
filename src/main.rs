@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::option;
 use std::{collections::HashMap, env};
 
 #[derive(Debug)]
@@ -6,8 +7,16 @@ struct CfgOptions(RefCell<HashMap<String, Option<String>>>); // Is this idiomati
 
 // TODO: FEATURE: Add a method to get unused optionks so far
 impl CfgOptions {
-    fn new(h: HashMap<String, Option<String>>) -> Self {
+    fn new() -> Self {
+        Self(RefCell::from(HashMap::default()))
+    }
+
+    fn from(h: HashMap<String, Option<String>>) -> Self {
         Self(RefCell::from(h))
+    }
+
+    fn register(&self, k: String, v: Option<String>) -> Option<Option<String>> {
+        self.0.borrow_mut().insert(k, v)
     }
 
     /// consumes the option
@@ -25,22 +34,29 @@ pub struct Cfg {
 }
 
 impl Cfg {
-    // TODO: Rewrite this to handle long options
     pub fn parse(args: impl Iterator<Item = impl ToString>) -> Self {
         let args = args.map(|s| s.to_string());
 
-        let mut options = HashMap::<String, Option<String>>::new();
-        let verbs = args
-            .filter_map(|s| {
-                if s.starts_with('-') {
-                    options.insert(s, None);
-                    None
-                } else {
-                    Some(s)
-                }
-            })
-            .collect();
-        let options = CfgOptions::new(options);
+        let mut verbs = vec![];
+        let options = CfgOptions::new();
+
+        for (_index, s) in args.enumerate() {
+            // if Options [
+            // if --
+            // get next s
+            // if -
+            // register option
+            // ] else
+            // if * (verb)
+            // add to verbs
+            if s.as_str().starts_with("--") {
+                todo!()
+            } else if s.starts_with('-') {
+                options.register(s, None);
+            } else {
+                verbs.push(s);
+            }
+        }
 
         Self { verbs, options }
     }
