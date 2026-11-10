@@ -21,7 +21,6 @@ mod config {
             self.0.borrow_mut().insert(k, v)
         }
 
-        // TODO: FEATURE: Add a method to get unused optionks so far
         fn get(&self, k: &String) -> Option<Option<String>> {
             self.0.borrow_mut().remove(k)
         }
@@ -36,7 +35,6 @@ mod config {
     }
 
     impl Cfg {
-        // TODO: Handle negative numbers -5 etc...
         // TODO: Handle --
         // TODO: Handle double/triple flags
         pub fn parse(args: impl Iterator<Item = impl ToString>) -> anyhow::Result<Self> {
@@ -63,7 +61,13 @@ mod config {
             Ok(Self { verbs, options })
         }
 
+        pub fn verbs(&self) -> impl Iterator<Item = &String> {
+            self.verbs.iter()
+        }
+
         // TODO: ARE WE SURE ABOUT RETURNING AN OPTION<BOOL> FOR THIS??????
+        // TODO: its possible to pass an argument such as -vx -- we probably want to warn the caller
+        // this is impossible
         pub fn get_short_option(&self, key: &str) -> Option<()> {
             let key = key.to_string();
 
@@ -85,12 +89,12 @@ mod config {
         use super::*;
 
         fn create_test_cfg() -> Cfg {
-            let cmd = "firstverb -q secondverb --long complement -vx ".to_string();
+            let cmd = "firstverb -q secondverb --long complement -vx -é".to_string();
             Cfg::parse(cmd.split(' ')).unwrap()
         }
 
         #[test]
-        fn test_cfg_parsing() {
+        fn test_cfg_basic_parsing() {
             let cfg = create_test_cfg();
 
             // Test verbs
@@ -100,43 +104,83 @@ mod config {
             );
 
             // Test options
-            let hm = cfg.options.0.into_inner();
+            let hm: HashMap<String, Option<String>> = cfg.options.0.into_inner();
             assert_eq!(
-                *hm.get("-q")
-                    .expect("Could not find -q in CfgOptions when it should be there"),
+                *hm.get("-q").expect(
+                    "Could not find -q in CfgOptions when it should be there | stdlib error"
+                ),
                 None
             );
 
+            // Long options
             assert_eq!(
-                *hm.get("-v")
-                    .expect("Could not find -v in CfgOptions when it should be there"),
-                None
-            );
-            assert_eq!(
-                *hm.get("-x")
-                    .expect("Could not find -x in CfgOptions when it should be there"),
-                None
-            );
-
-            assert_eq!(
-                *hm.get("--long")
-                    .expect("Could not find --long in CfgOptions when it should be there"),
+                *hm.get("--long").expect(
+                    "Could not find --long in CfgOptions when it should be there | stdlib error"
+                ),
                 Some("complement".to_string())
-            )
+            );
+
+            // Fake options
+            assert_eq!(hm.get("-$"), None);
         }
         #[test]
-        fn test_cfg_options() {
+        fn test_cfg_option_retrieving() {
             let cfg = create_test_cfg();
             println!("{cfg:#?}");
 
+            // -------- Short options
             cfg.get_short_option("-q")
                 .expect("Should have been able to find short option -q");
 
+            cfg.get_short_option("-v")
+                .expect("Should have been able to find short option -q");
+            cfg.get_short_option("-x")
+                .expect("Should have been able to find short option -q");
+
+            // -------- Long options
             let complement = cfg
                 .get_long_option("--long")
                 .expect("Should have been able to find long option --long");
-            assert_eq!(complement.as_str(), "complement")
+            assert_eq!(complement.as_str(), "complement");
+
+            // -------- Fake options
+            for param in ["$", "-$", "--$"] {
+                if cfg.get_short_option("$").is_some() {
+                    panic!("Expected Option::None, but got Option::Some(()");
+                }
+                if let Some(argument) = cfg.get_long_option("$") {
+                    panic!(
+                        "Expected Option::None, but got Option::Some({argument}) for parameter {param}"
+                    );
+                }
+            }
         }
+    }
+}
+
+mod app {
+    use crate::config::*;
+
+    fn version(cfg: &Cfg) {
+        let version = "0.1.0";
+        let pretty_display = if !cfg.get_short_option("-q").is_some() {
+            "The current version is "
+        } else {
+            ""
+        };
+
+        println!("{pretty_display}{version}");
+    }
+
+    pub fn run(cfg: &Cfg) -> anyhow::Result<()> {
+        for verb in cfg.verbs() {
+            match verb.as_str() {
+                "version" => version(cfg),
+                _ => eprintln!("Unknown verb parameter --> {verb}"),
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -148,5 +192,5 @@ fn main() -> anyhow::Result<()> {
 
     println!("{cfg:#?}");
 
-    Ok(())
+    app::run(&cfg)
 }
