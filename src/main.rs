@@ -1,12 +1,8 @@
-/// CfgOptions is a HashMap<String, Option<String>> where T is "-q"  or "--long" and U
 mod config {
-    use core::fmt;
     use std::cell::RefCell;
     use std::collections::HashMap;
 
     use anyhow::Context;
-
-    use crate::config::CfgError::ExpectedLongOption;
 
     #[derive(Debug)]
     struct CfgOptions(RefCell<HashMap<String, Option<String>>>); // Is this idiomatic?????????
@@ -21,29 +17,15 @@ mod config {
         //     Self(RefCell::from(h))
         // }
 
-        fn register(&self, k: String, v: Option<String>) -> Option<Option<String>> {
+        fn register(&mut self, k: String, v: Option<String>) -> Option<Option<String>> {
             self.0.borrow_mut().insert(k, v)
         }
 
-        // TODO: FEATURE: Add a method to get unused optionks so far WITHOUT REMOVING
+        // TODO: FEATURE: Add a method to get unused optionks so far
         fn get(&self, k: &String) -> Option<Option<String>> {
             self.0.borrow_mut().remove(k)
         }
     }
-
-    #[derive(Debug)]
-    pub enum CfgError {
-        ExpectedLongOption,
-    }
-
-    impl fmt::Display for CfgError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match self {
-                ExpectedLongOption => write!(f, "Tried to query a short option as a long option"),
-            }
-        }
-    }
-    impl std::error::Error for CfgError {}
 
     // TODO: Doc test rust
     // Ex: doku version -q --kitten meow -> Cfg{ verbs: ["version"], options: {"-q": None, "meow": Some("Kitten")}}
@@ -54,23 +36,28 @@ mod config {
     }
 
     impl Cfg {
+        // TODO: I hate this function so much REFACTOR
+        // TODO: Handle negative numbers -5 etc...
+        // TODO: Handle --
         pub fn parse(args: impl Iterator<Item = impl ToString>) -> anyhow::Result<Self> {
             let args: Vec<String> = args.map(|s| s.to_string()).collect();
 
             let mut verbs: Vec<String> = vec![];
-            let options = CfgOptions::new();
+            let mut options = CfgOptions::new();
 
             let mut index = 0;
             while let Some(s) = args.get(index) {
                 if s.as_str().starts_with("--") {
                     let complement = args
                         .get(index + 1)
-                        .context("No complement for option {s}")?;
+                        .context(format!("No complement for option {s}"))?;
                     options.register(s.clone(), Some(complement.clone()));
                     index += 1;
                 } else if s.starts_with('-') {
-                    options.register(s.clone(), None);
-                } else {
+                    for c in s.chars().skip(1) {
+                        options.register(format!("-{c}"), None);
+                    }
+                } else if !s.is_empty() {
                     verbs.push(s.clone());
                 }
 
@@ -102,11 +89,10 @@ mod config {
         use super::*;
 
         fn create_test_cfg() -> Cfg {
-            let cmd = "firstverb -q secondverb --long complement".to_string();
+            let cmd = "firstverb -q secondverb --long complement -vx ".to_string();
             Cfg::parse(cmd.split(' ')).unwrap()
         }
 
-        // TODO: TEST CFG PARSING
         #[test]
         fn test_cfg_parsing() {
             let cfg = create_test_cfg();
@@ -126,6 +112,17 @@ mod config {
             );
 
             assert_eq!(
+                *hm.get("-v")
+                    .expect("Could not find -v in CfgOptions when it should be there"),
+                None
+            );
+            assert_eq!(
+                *hm.get("-x")
+                    .expect("Could not find -x in CfgOptions when it should be there"),
+                None
+            );
+
+            assert_eq!(
                 *hm.get("--long")
                     .expect("Could not find --long in CfgOptions when it should be there"),
                 Some("complement".to_string())
@@ -134,6 +131,7 @@ mod config {
         #[test]
         fn test_cfg_options() {
             let cfg = create_test_cfg();
+            println!("{cfg:#?}");
 
             cfg.get_short_option("-q")
                 .expect("Should have been able to find short option -q");
@@ -143,34 +141,6 @@ mod config {
                 .expect("Should have been able to find long option --long");
             assert_eq!(complement.as_str(), "complement")
         }
-        // #[test]
-        // fn test_cfgoptions_short_option() {
-        //     let cfgoptions = CfgOptions::new();
-
-        //     cfgoptions.register("-q".into(), None);
-
-        //     let option = cfgoptions
-        //         .get(&"-q".into())
-        //         .expect("Could not retrive Option from CfgOptions");
-        //     assert_eq!(option, None);
-
-        //     let fake_option = cfgoptions.get(&"-q".into());
-        //     assert_eq!(fake_option, None);
-        // }
-        // #[test]
-        // fn test_cfgoptions_long_option() {
-        //     let cfgoptions = CfgOptions::new();
-
-        //     cfgoptions.register("--long".into(), Some("complement".into()));
-
-        //     let option = cfgoptions
-        //         .get(&"--long".into())
-        //         .expect("Could not retrive Option from CfgOptions");
-        //     assert_eq!(option, Some("complement".to_string()));
-
-        //     let fake_option = cfgoptions.get(&"--fake".into());
-        //     assert_eq!(fake_option, None);
-        // }
     }
 }
 
@@ -178,10 +148,9 @@ use std::env;
 
 fn main() -> anyhow::Result<()> {
     let args = env::args().skip(1);
+    let cfg = config::Cfg::parse(args)?;
 
-    let cfg = config::Cfg::parse(args);
-
-    println!("{cfg:?}");
+    println!("{cfg:#?}");
 
     Ok(())
 }
