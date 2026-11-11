@@ -1,320 +1,110 @@
-mod config {
-    use std::cell::Cell;
-    use std::collections::HashMap;
+mod app;
+mod config;
+mod modcmd;
 
-    #[derive(Debug)]
-    pub struct ArgEntry {
-        value: Option<String>,
-        strength: u8,
-        retrieve_count: Cell<usize>,
-    }
+mod commands {
+    use std::env;
 
-    impl ArgEntry {
-        fn new(value: Option<String>) -> Self {
-            Self {
-                value,
-                strength: 1,
-                retrieve_count: Cell::from(0),
-            }
+    use super::config::{ArgEntry, Cfg};
+    use super::modcmd::Command;
+
+    pub struct Version;
+    impl Command for Version {
+        fn name(&self) -> &str {
+            "version"
         }
-
-        pub fn value(&self) -> Option<&String> {
-            self.value.as_ref()
+        fn desc(&self) -> &str {
+            "version"
         }
-
-        pub fn strength(&self) -> u8 {
-            self.strength
-        }
-
-        pub fn retrieve_count(&self) -> usize {
-            self.retrieve_count.get()
-        }
-
-        fn increment_count(&self) -> &Self {
-            let count = self.retrieve_count();
-            self.retrieve_count.set(count + 1);
-            self
-        }
-    }
-
-    /// Implemented as a std::collections::HashMap
-    #[derive(Debug, Default)]
-    struct ArgsDb {
-        hashmap: HashMap<String, ArgEntry>,
-    }
-
-    impl ArgsDb {
-        fn new() -> Self {
-            Default::default()
-        }
-
-        fn register(&mut self, k: String, v: Option<String>) {
-            match self.hashmap.get_mut(&k) {
-                Some(entry) => {
-                    assert!(entry.value().is_none() && v.is_none()); // Make sure that these are
-                    // short arguments
-                    entry.strength += 1;
-                }
-                None => {
-                    self.hashmap.insert(k, ArgEntry::new(v));
-                }
-            }
-        }
-
-        fn get(&self, k: &String) -> Option<&ArgEntry> {
-            self.hashmap.get(k).map(ArgEntry::increment_count)
-        }
-
-        fn unused(&self) -> Vec<(&String, &ArgEntry)> {
-            self.hashmap
-                .iter()
-                .filter(|(_key, value)| value.retrieve_count() == 0)
-                .collect()
-        }
-    }
-
-    // Ex: doku version -q --kitten meow -> Cfg{ verbs: ["version"], options: {"-q": None, "meow": Some("Kitten")}}
-    #[derive(Debug)]
-    pub struct Cfg {
-        verbs: Vec<String>,
-        args_db: ArgsDb, // {"-q": None, "--ip": Some("192.168.1.25")}
-        rest: Vec<String>,
-    }
-
-    impl Cfg {
-        pub fn parse(args: impl Iterator<Item = impl ToString>) -> Self {
-            let mut args = args.map(|s| s.to_string());
-
-            let mut verbs: Vec<String> = vec![];
-            let mut args_db = ArgsDb::new();
-            let mut rest = Vec::default();
-
-            while let Some(s) = args.next() {
-                if s.as_str() == "--" {
-                    rest = args.collect();
-                    break;
-                }
-
-                if s.starts_with("--") {
-                    let complement = args.next();
-                    args_db.register(s, complement);
-                } else if s.starts_with('-') {
-                    for c in s.chars().skip(1) {
-                        args_db.register(format!("-{c}"), None);
-                    }
-                } else if !s.is_empty() {
-                    verbs.push(s);
-                }
-            }
-
-            let cfg = Self {
-                verbs,
-                args_db,
-                rest,
+        fn execute(&self, cfg: &Cfg, _verbs: &mut dyn Iterator<Item = &String>) {
+            let version = env!("CARGO_PKG_VERSION");
+            let pretty_display = match cfg.retrieve_argument("-q").map(ArgEntry::strength) {
+                None => "The current version is ",
+                Some(1) => "v:",
+                Some(_) => "",
             };
 
-            log::debug!("Just built a config:\n{cfg:#?}\n---");
-            cfg
-        }
-
-        pub fn verbs(&self) -> impl Iterator<Item = &String> {
-            self.verbs.iter()
-        }
-        // TODO: its possible to pass an argument such as -vx -- we probably want to warn the caller
-        // that this is an invalid key value
-        pub fn retrieve_argument(&self, param: &str) -> Option<&ArgEntry> {
-            let param = param.to_string();
-            self.args_db.get(&param)
-        }
-
-        // TODO: I should probably have a general function for both args and verbs at this abstraction level
-        pub fn retrieve_unused_arguments(&self) -> Vec<(&String, &ArgEntry)> {
-            self.args_db.unused()
-        }
-
-        // TODO: I should probably have a general function for both args and verbs at this abstraction level
-        pub fn retrieve_rest(&self) -> &Vec<String> {
-            &self.rest
-        }
-
-        // TODO: I should probably have a general function for both args and verbs at this abstraction level OR A Struct that represents all of the residual data of a config
-        pub fn as_rest(self) -> Vec<String> {
-            self.rest
+            println!("{pretty_display}{version}");
         }
     }
 
-    // TODO: Implemente this
-    struct ResidualCfg {}
-
-    #[cfg(test)]
-    mod tests {
-        use rand::seq::SliceRandom;
-
-        use super::*;
-
-        // ------------------------ Unused Arguments -------------------------
-        #[test]
-        fn rest_test() {
-            let cmd = "version -q -- test123 123test";
-
-            let cfg = Cfg::parse(cmd.split(" "));
-
-            assert_eq!(*cfg.retrieve_rest(), vec!["test123", "123test"]);
-            assert_eq!(cfg.as_rest(), vec!["test123", "123test"]);
+    pub struct Echo;
+    impl Command for Echo {
+        fn name(&self) -> &str {
+            "echo"
         }
-        // ------------------------ Unused Arguments -------------------------
-        // TODO: This test could be improved
-        #[test]
-        fn unused_arguments_test() {
-            let cmd = "blabla -q";
-
-            let cfg = Cfg::parse(cmd.split(" "));
-
-            assert_eq!(cfg.retrieve_unused_arguments()[0].0, "-q");
+        fn desc(&self) -> &str {
+            "echo its arguments"
         }
-        // ------------------------ Retrieving -------------------------
-        #[test]
-        fn retrieve_count_test() {
-            let cmd = "blabla -q";
-
-            let cfg = Cfg::parse(cmd.split(" "));
-
-            cfg.retrieve_argument("-q");
-            cfg.retrieve_argument("-q");
-
-            let entry = cfg.retrieve_argument("-q").unwrap();
-            assert_eq!(entry.retrieve_count(), 3)
-        }
-
-        // ------------------------ PARSING -------------------------
-        fn gen_verbs() -> Vec<String> {
-            let v = ["firstverb", "secondverb"];
-
-            v.iter().map(|s| s.to_string()).collect()
-        }
-        fn gen_shorts() -> Vec<(String, Option<String>)> {
-            let v = ["-q", "-vx", "-é"];
-
-            v.iter().map(|s| (s.to_string(), None)).collect()
-        }
-        fn gen_longs() -> Vec<(String, Option<String>)> {
-            let v = [("--long", "complement"), ("--kitten", "meow")];
-
-            v.iter()
-                .map(|s| (s.0.to_string(), Some(s.1.to_string())))
-                .collect()
-        }
-
-        #[test]
-        fn general_config_parsing_test() {
-            let verbs = gen_verbs();
-            let shorts = gen_shorts();
-            let longs = gen_longs();
-
-            let mut params: Vec<String> = [shorts.clone(), longs.clone()]
-                .concat()
-                .iter()
-                .map(|s| {
-                    let s0 = s.0.clone();
-                    match &s.1 {
-                        Some(s1) => s0 + " " + s1.as_str(),
-                        None => s0,
-                    }
-                })
-                .collect();
-            params.shuffle(&mut rand::rng());
-
-            let cmd: Vec<String> = [verbs.clone(), params]
-                .concat()
-                .join(" ")
-                .split(" ")
-                .map(str::to_string)
-                .collect();
-            println!("The config will parse this command: \n{cmd:?}\n---");
-
-            let cfg = Cfg::parse(cmd.iter());
-            println!("This is the parsed config: \n{cfg:#?}\n---");
-
-            // Verify verbs
-            verbs
-                .iter()
-                .zip(cfg.verbs.iter())
-                .for_each(|(v, v_parsed)| {
-                    assert_eq!(*v, *v_parsed);
-                });
-
-            // Verify shorts
-            for (param, _) in shorts {
-                println!("{param}");
-                for c in param.chars().skip(1) {
-                    println!("-{c}");
-                    assert!(cfg.retrieve_argument(format!("-{c}").as_str()).is_some());
-                }
+        fn execute(&self, _cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) {
+            for verb in verbs {
+                print!("{verb}");
             }
-
-            // Verify longs
-            for (param, complement_wrapped) in longs {
-                let complement = complement_wrapped.expect("Should have complement");
-
-                let entry = cfg
-                    .retrieve_argument(param.as_str())
-                    .expect("Should have found ArgEntry for {param}");
-                assert_eq!(
-                    entry
-                        .value()
-                        .expect("Long options should have values")
-                        .as_str(),
-                    complement.as_str()
-                );
-            }
-        }
-        // TODO:
-        #[ignore = "Unimplemented"]
-        #[test]
-        fn general_config_parsing_failure() {
-            unimplemented!()
         }
     }
-}
 
-mod app {
-    use crate::config::*;
-
-    fn version(cfg: &Cfg) {
-        let version = "0.1.0";
-        let pretty_display = match cfg.retrieve_argument("-q").map(ArgEntry::strength) {
-            None => "The current version is ",
-            Some(1) => "v:",
-            Some(_) => "",
-        };
-
-        println!("{pretty_display}{version}");
+    pub struct Hi;
+    impl Command for Hi {
+        fn name(&self) -> &str {
+            "hi"
+        }
+        fn desc(&self) -> &str {
+            "says hi"
+        }
+        fn execute(&self, _cfg: &Cfg, _verbs: &mut dyn Iterator<Item = &String>) {
+            println!("hi");
+        }
     }
 
-    pub fn run(cfg: &Cfg) -> anyhow::Result<()> {
-        for verb in cfg.verbs() {
-            match verb.as_str() {
-                "version" => version(cfg),
-                _ => eprintln!("Unknown verb --> {verb}"),
-            }
+    pub struct MathSum;
+    impl Command for MathSum {
+        fn name(&self) -> &str {
+            "sum"
         }
-
-        for (key, arg) in cfg.retrieve_unused_arguments().into_iter() {
-            eprintln!("Useless parameter: ({key})");
-            log::debug!("Useless ArgEntry:\n{arg:?}\n---");
+        fn desc(&self) -> &str {
+            "sum all its arguments"
         }
-
-        Ok(())
+        fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) {
+            let pretty_display = match cfg.retrieve_argument("-q") {
+                Some(_) => "",
+                None => "The sum is ",
+            };
+            let sum: f32 = verbs.filter_map(|x| x.parse::<f32>().ok()).sum();
+            println!("{pretty_display}{sum}");
+        }
     }
 }
 
 use std::env;
 
-fn main() -> anyhow::Result<()> {
+use app::App;
+use modcmd::Module;
+
+// TODO: Create tests for the modules and commands
+fn main() {
     env_logger::init();
 
-    let args = env::args().skip(1);
-    let cfg = config::Cfg::parse(args);
+    let mut topmod = Module::new("App", "App description"); // Maybe? why not?
+    topmod.register(Box::from(commands::Version)); // TODO: I hate this syntax :(
+    topmod.register(Box::from(commands::Echo));
+    topmod.register(Box::from(commands::Hi));
 
-    app::run(&cfg)
+    let mut submod = Module::new("math", "do math");
+    submod.register(Box::from(commands::MathSum));
+
+    topmod.register(Box::from(submod));
+
+    let args = env::args().skip(1);
+    let app = App::new(args, topmod);
+
+    // TODO: This needs to be a result
+    let app_result = app.run();
+    for r_verb in app_result.remaining_verbs() {
+        eprintln!("Remaining_verbs (good): {r_verb}");
+    }
+
+    for (key, arg) in app_result.unused_arguments().iter() {
+        eprintln!("Useless parameter: ({key})");
+        log::debug!("Useless ArgEntry:\n{arg:?}\n---");
+    }
 }
