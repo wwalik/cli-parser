@@ -107,11 +107,14 @@ mod config {
                 }
             }
 
-            Self {
+            let cfg = Self {
                 verbs,
                 args_db,
                 rest,
-            }
+            };
+
+            log::debug!("Just built a config:\n{cfg:#?}\n---");
+            cfg
         }
 
         pub fn verbs(&self) -> impl Iterator<Item = &String> {
@@ -292,12 +295,13 @@ mod app {
         for verb in cfg.verbs() {
             match verb.as_str() {
                 "version" => version(cfg),
-                _ => eprintln!("Unknown verb parameter --> {verb}"),
+                _ => eprintln!("Unknown verb --> {verb}"),
             }
         }
 
         for (key, arg) in cfg.retrieve_unused_arguments().into_iter() {
-            eprintln!("Unused parameter: ({key}) with argument:\n({arg:#?})\n---");
+            eprintln!("Useless parameter: ({key})");
+            log::debug!("Useless ArgEntry:\n{arg:?}\n---");
         }
 
         Ok(())
@@ -307,10 +311,10 @@ mod app {
 use std::env;
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let args = env::args().skip(1);
     let cfg = config::Cfg::parse(args);
-
-    println!("{cfg:#?}");
 
     app::run(&cfg)
 }
