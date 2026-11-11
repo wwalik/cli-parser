@@ -2,8 +2,6 @@ mod config {
     use std::cell::Cell;
     use std::collections::HashMap;
 
-    use anyhow::Context;
-
     #[derive(Debug)]
     pub struct ArgEntry {
         value: Option<String>,
@@ -80,29 +78,26 @@ mod config {
     pub struct Cfg {
         verbs: Vec<String>,
         args_db: ArgsDb, // {"-q": None, "--ip": Some("192.168.1.25")}
+        rest: Vec<String>,
     }
 
     impl Cfg {
-        // TODO: Handle double/triple flags
-        // TODO: Make this function less evil
-        // TODO: Handle -- better
-        // TODO: Get rid of the anyhow::Result
-        pub fn parse(args: impl Iterator<Item = impl ToString>) -> anyhow::Result<Self> {
+        pub fn parse(args: impl Iterator<Item = impl ToString>) -> Self {
             let mut args = args.map(|s| s.to_string());
 
             let mut verbs: Vec<String> = vec![];
             let mut args_db = ArgsDb::new();
+            let mut rest = Vec::default();
 
             while let Some(s) = args.next() {
                 if s.as_str() == "--" {
+                    rest = args.collect();
                     break;
                 }
 
                 if s.starts_with("--") {
-                    let complement = args
-                        .next()
-                        .with_context(|| format!("No complement for option {s}"))?;
-                    args_db.register(s, Some(complement));
+                    let complement = args.next();
+                    args_db.register(s, complement);
                 } else if s.starts_with('-') {
                     for c in s.chars().skip(1) {
                         args_db.register(format!("-{c}"), None);
@@ -112,7 +107,11 @@ mod config {
                 }
             }
 
-            Ok(Self { verbs, args_db })
+            Self {
+                verbs,
+                args_db,
+                rest,
+            }
         }
 
         pub fn verbs(&self) -> impl Iterator<Item = &String> {
@@ -125,11 +124,24 @@ mod config {
             self.args_db.get(&param)
         }
 
-        // I should probably have a general function for both args and verbs at this abstraction level
+        // TODO: I should probably have a general function for both args and verbs at this abstraction level
         pub fn retrieve_unused_arguments(&self) -> Vec<(&String, &ArgEntry)> {
             self.args_db.unused()
         }
+
+        // TODO: I should probably have a general function for both args and verbs at this abstraction level
+        pub fn retrieve_rest(&self) -> &Vec<String> {
+            &self.rest
+        }
+
+        // TODO: I should probably have a general function for both args and verbs at this abstraction level OR A Struct that represents all of the residual data of a config
+        pub fn as_rest(self) -> Vec<String> {
+            self.rest
+        }
     }
+
+    // TODO: Implemente this
+    struct ResidualCfg {}
 
     #[cfg(test)]
     mod tests {
@@ -137,17 +149,32 @@ mod config {
 
         use super::*;
 
-        // ------------------------ Retrieving -------------------------
+        // ------------------------ Unused Arguments -------------------------
+        #[test]
+        fn rest_test() {
+            let cmd = "version -q -- test123 123test";
+
+            let cfg = Cfg::parse(cmd.split(" "));
+
+            assert_eq!(*cfg.retrieve_rest(), vec!["test123", "123test"]);
+            assert_eq!(cfg.as_rest(), vec!["test123", "123test"]);
+        }
+        // ------------------------ Unused Arguments -------------------------
+        // TODO: This test could be improved
         #[test]
         fn unused_arguments_test() {
             let cmd = "blabla -q";
+
+            let cfg = Cfg::parse(cmd.split(" "));
+
+            assert_eq!(cfg.retrieve_unused_arguments()[0].0, "-q");
         }
         // ------------------------ Retrieving -------------------------
         #[test]
         fn retrieve_count_test() {
             let cmd = "blabla -q";
 
-            let cfg = Cfg::parse(cmd.split(" ")).unwrap();
+            let cfg = Cfg::parse(cmd.split(" "));
 
             cfg.retrieve_argument("-q");
             cfg.retrieve_argument("-q");
@@ -202,7 +229,7 @@ mod config {
                 .collect();
             println!("The config will parse this command: \n{cmd:?}\n---");
 
-            let cfg = Cfg::parse(cmd.iter()).expect("Error parsing");
+            let cfg = Cfg::parse(cmd.iter());
             println!("This is the parsed config: \n{cfg:#?}\n---");
 
             // Verify verbs
@@ -238,6 +265,7 @@ mod config {
                 );
             }
         }
+        // TODO:
         #[ignore = "Unimplemented"]
         #[test]
         fn general_config_parsing_failure() {
@@ -280,7 +308,7 @@ use std::env;
 
 fn main() -> anyhow::Result<()> {
     let args = env::args().skip(1);
-    let cfg = config::Cfg::parse(args)?;
+    let cfg = config::Cfg::parse(args);
 
     println!("{cfg:#?}");
 
