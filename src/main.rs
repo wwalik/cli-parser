@@ -1,5 +1,5 @@
 mod config {
-    use std::cell::RefCell;
+    use std::cell::Cell;
     use std::collections::HashMap;
 
     use anyhow::Context;
@@ -8,10 +8,18 @@ mod config {
     pub struct ArgEntry {
         value: Option<String>,
         strength: u8,
-        retrieve_count: usize,
+        retrieve_count: Cell<usize>,
     }
 
     impl ArgEntry {
+        fn new(value: Option<String>) -> Self {
+            Self {
+                value,
+                strength: 1,
+                retrieve_count: Cell::from(0),
+            }
+        }
+
         pub fn value(&self) -> Option<&String> {
             self.value.as_ref()
         }
@@ -20,55 +28,70 @@ mod config {
             self.strength
         }
 
-        fn retrieve_count(&self) -> usize {
-            self.retrieve_count
+        pub fn retrieve_count(&self) -> usize {
+            self.retrieve_count.get()
+        }
+
+        fn increment_count(&self) -> &Self {
+            let count = self.retrieve_count();
+            self.retrieve_count.set(count + 1);
+            self
         }
     }
 
-    #[derive(Debug)]
-    struct ArgsDb(RefCell<HashMap<String, ArgEntry>>); // Is this idiomatic?????????
+    /// Implemented as a std::collections::HashMap
+    #[derive(Debug, Default)]
+    struct ArgsDb {
+        hashmap: HashMap<String, ArgEntry>,
+    }
 
-    // TODO: FEATURE: Add a method to get unused optionks so far
     impl ArgsDb {
         fn new() -> Self {
-            Self(RefCell::from(HashMap::default()))
+            Default::default()
         }
 
-        // fn from(h: HashMap<String, Option<String>>) -> Self {
-        //     Self(RefCell::from(h))
-        // }
-
-        fn register(&mut self, k: String, v: Option<String>) -> Option<ArgEntry> {
-            let arg = ArgEntry {
-                value: v,
-                strength: 1,
-                retrieve_count: 0,
-            };
-
-            self.0.borrow_mut().insert(k, arg)
+        fn register(&mut self, k: String, v: Option<String>) {
+            match self.hashmap.get_mut(&k) {
+                Some(entry) => {
+                    assert!(entry.value().is_none() && v.is_none()); // Make sure that these are
+                    // short arguments
+                    entry.strength += 1;
+                }
+                None => {
+                    self.hashmap.insert(k, ArgEntry::new(v));
+                }
+            }
         }
 
-        fn get(&self, k: &String) -> Option<ArgEntry> {
-            self.0.borrow_mut().remove(k)
+        fn get(&self, k: &String) -> Option<&ArgEntry> {
+            self.hashmap.get(k).map(ArgEntry::increment_count)
+        }
+
+        fn unused(&self) -> Vec<(&String, &ArgEntry)> {
+            self.hashmap
+                .iter()
+                .filter(|(_key, value)| value.retrieve_count() == 0)
+                .collect()
         }
     }
 
-    // TODO: Doc test rust
     // Ex: doku version -q --kitten meow -> Cfg{ verbs: ["version"], options: {"-q": None, "meow": Some("Kitten")}}
     #[derive(Debug)]
     pub struct Cfg {
         verbs: Vec<String>,
-        options: ArgsDb, // {"-q": None, "--ip": Some("192.168.1.25")}
+        args_db: ArgsDb, // {"-q": None, "--ip": Some("192.168.1.25")}
     }
 
     impl Cfg {
         // TODO: Handle double/triple flags
         // TODO: Make this function less evil
+        // TODO: Handle -- better
+        // TODO: Get rid of the anyhow::Result
         pub fn parse(args: impl Iterator<Item = impl ToString>) -> anyhow::Result<Self> {
             let mut args = args.map(|s| s.to_string());
 
             let mut verbs: Vec<String> = vec![];
-            let mut options = ArgsDb::new();
+            let mut args_db = ArgsDb::new();
 
             while let Some(s) = args.next() {
                 if s.as_str() == "--" {
@@ -79,27 +102,32 @@ mod config {
                     let complement = args
                         .next()
                         .with_context(|| format!("No complement for option {s}"))?;
-                    options.register(s, Some(complement));
+                    args_db.register(s, Some(complement));
                 } else if s.starts_with('-') {
                     for c in s.chars().skip(1) {
-                        options.register(format!("-{c}"), None);
+                        args_db.register(format!("-{c}"), None);
                     }
                 } else if !s.is_empty() {
                     verbs.push(s);
                 }
             }
 
-            Ok(Self { verbs, options })
+            Ok(Self { verbs, args_db })
         }
 
         pub fn verbs(&self) -> impl Iterator<Item = &String> {
             self.verbs.iter()
         }
         // TODO: its possible to pass an argument such as -vx -- we probably want to warn the caller
-        // this is impossible
-        pub fn retrieve_argument(&self, param: &str) -> Option<ArgEntry> {
+        // that this is an invalid key value
+        pub fn retrieve_argument(&self, param: &str) -> Option<&ArgEntry> {
             let param = param.to_string();
-            self.options.get(&param)
+            self.args_db.get(&param)
+        }
+
+        // I should probably have a general function for both args and verbs at this abstraction level
+        pub fn retrieve_unused_arguments(&self) -> Vec<(&String, &ArgEntry)> {
+            self.args_db.unused()
         }
     }
 
@@ -109,6 +137,26 @@ mod config {
 
         use super::*;
 
+        // ------------------------ Retrieving -------------------------
+        #[test]
+        fn unused_arguments_test() {
+            let cmd = "blabla -q";
+        }
+        // ------------------------ Retrieving -------------------------
+        #[test]
+        fn retrieve_count_test() {
+            let cmd = "blabla -q";
+
+            let cfg = Cfg::parse(cmd.split(" ")).unwrap();
+
+            cfg.retrieve_argument("-q");
+            cfg.retrieve_argument("-q");
+
+            let entry = cfg.retrieve_argument("-q").unwrap();
+            assert_eq!(entry.retrieve_count(), 3)
+        }
+
+        // ------------------------ PARSING -------------------------
         fn gen_verbs() -> Vec<String> {
             let v = ["firstverb", "secondverb"];
 
@@ -128,7 +176,7 @@ mod config {
         }
 
         #[test]
-        fn general_config_parsing() {
+        fn general_config_parsing_test() {
             let verbs = gen_verbs();
             let shorts = gen_shorts();
             let longs = gen_longs();
@@ -203,10 +251,10 @@ mod app {
 
     fn version(cfg: &Cfg) {
         let version = "0.1.0";
-        let pretty_display = if !cfg.retrieve_argument("-q").is_some() {
-            "The current version is "
-        } else {
-            ""
+        let pretty_display = match cfg.retrieve_argument("-q").map(ArgEntry::strength) {
+            None => "The current version is ",
+            Some(1) => "v:",
+            Some(_) => "",
         };
 
         println!("{pretty_display}{version}");
@@ -218,6 +266,10 @@ mod app {
                 "version" => version(cfg),
                 _ => eprintln!("Unknown verb parameter --> {verb}"),
             }
+        }
+
+        for (key, arg) in cfg.retrieve_unused_arguments().into_iter() {
+            eprintln!("Unused parameter: ({key}) with argument:\n({arg:#?})\n---");
         }
 
         Ok(())
