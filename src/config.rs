@@ -1,6 +1,8 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
+use super::app::AppResult;
+
 #[derive(Debug)]
 pub struct ArgEntry {
     value: Option<String>,
@@ -64,12 +66,12 @@ impl ArgsDb {
         self.hashmap.get(k).map(ArgEntry::increment_count)
     }
 
-    fn unused(&self) -> Vec<(&String, &ArgEntry)> {
-        self.hashmap
-            .iter()
-            .filter(|(_key, value)| value.retrieve_count() == 0)
-            .collect()
-    }
+    // fn unused(&self) -> Vec<(&String, &ArgEntry)> {
+    //     self.hashmap
+    //         .iter()
+    //         .filter(|(_key, value)| value.retrieve_count() == 0)
+    //         .collect()
+    // }
 }
 
 // Ex: doku version -q --kitten meow -> Cfg{ verbs: ["version"], options: {"-q": None, "meow": Some("Kitten")}}
@@ -120,19 +122,31 @@ impl Cfg {
         self.args_db.get(&param)
     }
 
-    // TODO: I should probably have a general function for both args and verbs at this abstraction level
-    pub fn retrieve_unused_arguments(&self) -> Vec<(&String, &ArgEntry)> {
-        self.args_db.unused()
+    // pub fn retrieve_unused_arguments(&self) -> Vec<(&String, &ArgEntry)> {
+    //     self.args_db.unused()
+    // }
+
+    pub fn transform_app_result(mut self, remaining_verbs: Vec<String>) -> AppResult {
+        let unused_arguments = self
+            .args_db
+            .hashmap
+            .drain()
+            .filter(|(_key, arg_entry)| arg_entry.retrieve_count() == 0)
+            .collect();
+        AppResult {
+            remaining_verbs,
+            unused_arguments,
+        }
     }
 }
 
+// TODO: Make tests exhaustive
 #[cfg(test)]
 mod tests {
     use rand::seq::SliceRandom;
 
     use super::*;
 
-    // ------------------------ Unused Arguments -------------------------
     #[test]
     fn double_dash_test() {
         let cmd = "version -q -- test123 --123test";
@@ -144,16 +158,6 @@ mod tests {
             cfg.verbs().collect::<Vec<&String>>(),
             vec!["version", "test123", "--123test"]
         );
-    }
-    // ------------------------ Unused Arguments -------------------------
-    // TODO: This test could be improved
-    #[test]
-    fn unused_arguments_test() {
-        let cmd = "blabla -q";
-
-        let cfg = Cfg::parse(cmd.split(" "));
-
-        assert_eq!(cfg.retrieve_unused_arguments()[0].0, "-q");
     }
     // ------------------------ Retrieving -------------------------
     #[test]

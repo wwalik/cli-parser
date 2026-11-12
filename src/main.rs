@@ -1,9 +1,4 @@
-mod app;
-mod config;
-mod modcmd;
-
 mod commands {
-
     use anyhow::Result;
 
     use super::config::{ArgEntry, Cfg};
@@ -75,6 +70,12 @@ mod commands {
             fn desc(&self) -> &str {
                 "sum all its arguments"
             }
+            fn help(&self) {
+                println!(
+                    "Usage: sum <arg0> <arg1> <arg2> <arg...>
+pssss. -q makes me quiet"
+                );
+            }
             fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
                 let pretty_display = match cfg.retrieve_argument("-q") {
                     Some(_) => "",
@@ -89,16 +90,22 @@ mod commands {
     }
 }
 
+mod app;
+mod config;
+mod modcmd;
+
 use std::env;
 
 use app::App;
 use modcmd::Module;
 
+// TODO: This should really be automated by macros...
 fn create_topmod() -> Module {
     let mut submod = Module::new("math", "do math");
     submod.register(commands::math::Sum);
 
-    let mut topmod = Module::new("App", "App description"); // Maybe? why not?
+    let mut topmod = Module::new("App", "App description");
+    // TODO: This should also have a macro...
     topmod
         .register(commands::Version)
         .register(commands::Echo)
@@ -114,7 +121,7 @@ fn main() -> anyhow::Result<()> {
     let app = App::new(env::args().skip(1), create_topmod());
     let app_result = app.run()?;
 
-    for (key, arg) in app_result.unused_arguments().iter() {
+    for (key, arg) in app_result.unused_arguments.iter() {
         eprintln!("Useless parameter: ({key})");
         log::debug!("Useless ArgEntry:\n{arg:?}\n---");
     }

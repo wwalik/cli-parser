@@ -3,26 +3,17 @@ use std::fmt;
 use super::config::{ArgEntry, Cfg};
 use super::modcmd::Command;
 
-// TODO: I think I want to be able to ? inside of my <impl Command> structs, so i need a way to
-// return an error
 pub struct AppResult {
-    remaining_verbs: Vec<String>,
-    cfg: Cfg,
-}
-
-impl AppResult {
-    pub fn remaining_verbs(&self) -> &Vec<String> {
-        &self.remaining_verbs
-    }
-    pub fn unused_arguments(&self) -> Vec<(&String, &ArgEntry)> {
-        self.cfg.retrieve_unused_arguments()
-    }
+    pub remaining_verbs: Vec<String>,
+    pub unused_arguments: Vec<(String, ArgEntry)>,
 }
 
 impl fmt::Display for AppResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let remaining_verbs = self.remaining_verbs();
-        let unused_arguments = self.unused_arguments();
+        let AppResult {
+            remaining_verbs,
+            unused_arguments,
+        } = self;
 
         write!(f, "AppResult: {remaining_verbs:?} {unused_arguments:#?}")
     }
@@ -42,10 +33,8 @@ impl App {
 
         self.topmod.execute(&self.cfg, &mut verbs)?;
 
-        let app_result = AppResult {
-            remaining_verbs: verbs.cloned().collect(),
-            cfg: self.cfg,
-        };
+        let remaining_verbs = verbs.cloned().collect();
+        let app_result = self.cfg.transform_app_result(remaining_verbs);
 
         log::debug!("App Result: {app_result}");
         Ok(app_result)

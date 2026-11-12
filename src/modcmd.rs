@@ -3,12 +3,15 @@ use super::config::*;
 pub trait Command {
     fn name(&self) -> &str;
     fn desc(&self) -> &str;
+    fn brief(&self) -> String {
+        self.name().to_owned() + ": " + self.desc()
+    }
     // TODO: Add long descs
     // fn long_desc(&self) -> Option<&str> {
     //     None
     // }
     fn help(&self) {
-        println!("{} : {}", self.name(), self.desc());
+        println!("Mystere et boule de gomme");
     }
     fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> anyhow::Result<()>;
 }
@@ -44,7 +47,7 @@ impl Module {
         println!("{}", self.desc());
         println!("------------");
         for mod_cmd in &self.cmds {
-            mod_cmd.help();
+            println!("{}", mod_cmd.brief());
         }
     }
 }
