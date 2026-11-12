@@ -1,8 +1,7 @@
 mod commands {
     use anyhow::Result;
 
-    use super::config::{ArgEntry, Cfg};
-    use super::modcmd::Command;
+    use doku::cli::{AppConfig, Command, FlagEntry};
 
     pub struct Version;
     impl Command for Version {
@@ -12,9 +11,13 @@ mod commands {
         fn desc(&self) -> &str {
             "version"
         }
-        fn execute(&self, cfg: &Cfg, _verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
+        fn execute(
+            &self,
+            cfg: &AppConfig,
+            _verbs: &mut dyn Iterator<Item = &String>,
+        ) -> Result<()> {
             let version = env!("CARGO_PKG_VERSION");
-            let pretty_display = match cfg.retrieve_argument("-q").map(ArgEntry::strength) {
+            let pretty_display = match cfg.retrieve_argument("-q").map(FlagEntry::strength) {
                 None => "The current version is ",
                 Some(1) => "v:",
                 Some(_) => "",
@@ -33,7 +36,11 @@ mod commands {
         fn desc(&self) -> &str {
             "echo its arguments"
         }
-        fn execute(&self, _cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
+        fn execute(
+            &self,
+            _cfg: &AppConfig,
+            verbs: &mut dyn Iterator<Item = &String>,
+        ) -> Result<()> {
             for verb in verbs {
                 print!("{verb}");
             }
@@ -52,7 +59,7 @@ mod commands {
         }
         fn execute(
             &self,
-            _cfg: &Cfg,
+            _cfg: &AppConfig,
             _verbs: &mut dyn Iterator<Item = &String>,
         ) -> anyhow::Result<()> {
             println!("hi");
@@ -70,7 +77,11 @@ mod commands {
             fn desc(&self) -> &str {
                 "sum all its arguments"
             }
-            fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
+            fn execute(
+                &self,
+                cfg: &AppConfig,
+                verbs: &mut dyn Iterator<Item = &String>,
+            ) -> Result<()> {
                 let pretty_display = match cfg.retrieve_argument("-q") {
                     Some(_) => "",
                     None => "The sum is ",
@@ -84,14 +95,10 @@ mod commands {
     }
 }
 
-mod app;
-mod config;
-mod modcmd;
-
 use std::env;
 
-use app::App;
-use modcmd::Module;
+use doku::cli::App;
+use doku::cli::Module;
 
 // TODO: This should really be automated by macros...
 fn create_topmod() -> Module {
@@ -115,7 +122,7 @@ fn main() -> anyhow::Result<()> {
     let app = App::new(env::args().skip(1), create_topmod());
     let app_result = app.run()?;
 
-    for (key, arg) in app_result.unused_arguments.iter() {
+    for (key, arg) in app_result.useless_flags.iter() {
         eprintln!("Useless parameter: ({key})");
         log::debug!("Useless ArgEntry:\n{arg:?}\n---");
     }

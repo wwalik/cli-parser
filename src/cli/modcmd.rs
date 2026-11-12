@@ -10,7 +10,11 @@ pub trait Command {
     // fn long_desc(&self) -> Option<&str> {
     //     None
     // }
-    fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> anyhow::Result<()>;
+    fn execute(
+        &self,
+        cfg: &AppConfig,
+        verbs: &mut dyn Iterator<Item = &String>,
+    ) -> anyhow::Result<()>;
 }
 
 pub struct Module {
@@ -57,7 +61,11 @@ impl Command for Module {
         &self.desc
     }
 
-    fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> anyhow::Result<()> {
+    fn execute(
+        &self,
+        cfg: &AppConfig,
+        verbs: &mut dyn Iterator<Item = &String>,
+    ) -> anyhow::Result<()> {
         let verb = verbs.next().map_or("", String::as_str);
 
         match self.cmds.iter().find(|&cmd| cmd.name() == verb) {

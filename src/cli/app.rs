@@ -1,31 +1,31 @@
 use std::fmt;
 
-use super::config::{ArgEntry, Cfg};
+use super::config::{AppConfig, FlagEntry};
 use super::modcmd::Command;
 
 pub struct AppResult {
     pub remaining_verbs: Vec<String>,
-    pub unused_arguments: Vec<(String, ArgEntry)>,
+    pub useless_flags: Vec<(String, FlagEntry)>,
 }
 
 impl fmt::Display for AppResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let AppResult {
             remaining_verbs,
-            unused_arguments,
+            useless_flags: unused_arguments,
         } = self;
 
         write!(f, "AppResult: {remaining_verbs:?} {unused_arguments:#?}")
     }
 }
 pub struct App {
-    cfg: Cfg,
+    cfg: AppConfig,
     topmod: super::modcmd::Module,
 }
 
 impl App {
     pub fn new(args: impl Iterator<Item = String>, topmod: super::modcmd::Module) -> Self {
-        let cfg = Cfg::parse(args);
+        let cfg = AppConfig::parse(args);
         Self { cfg, topmod }
     }
     pub fn run(self) -> anyhow::Result<AppResult> {
