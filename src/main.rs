@@ -3,7 +3,8 @@ mod config;
 mod modcmd;
 
 mod commands {
-    use std::env;
+
+    use anyhow::Result;
 
     use super::config::{ArgEntry, Cfg};
     use super::modcmd::Command;
@@ -16,7 +17,7 @@ mod commands {
         fn desc(&self) -> &str {
             "version"
         }
-        fn execute(&self, cfg: &Cfg, _verbs: &mut dyn Iterator<Item = &String>) {
+        fn execute(&self, cfg: &Cfg, _verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
             let version = env!("CARGO_PKG_VERSION");
             let pretty_display = match cfg.retrieve_argument("-q").map(ArgEntry::strength) {
                 None => "The current version is ",
@@ -25,6 +26,7 @@ mod commands {
             };
 
             println!("{pretty_display}{version}");
+            Ok(())
         }
     }
 
@@ -36,10 +38,12 @@ mod commands {
         fn desc(&self) -> &str {
             "echo its arguments"
         }
-        fn execute(&self, _cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) {
+        fn execute(&self, _cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
             for verb in verbs {
                 print!("{verb}");
             }
+
+            Ok(())
         }
     }
 
@@ -51,8 +55,13 @@ mod commands {
         fn desc(&self) -> &str {
             "says hi"
         }
-        fn execute(&self, _cfg: &Cfg, _verbs: &mut dyn Iterator<Item = &String>) {
+        fn execute(
+            &self,
+            _cfg: &Cfg,
+            _verbs: &mut dyn Iterator<Item = &String>,
+        ) -> anyhow::Result<()> {
             println!("hi");
+            Ok(())
         }
     }
 
@@ -64,13 +73,15 @@ mod commands {
         fn desc(&self) -> &str {
             "sum all its arguments"
         }
-        fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) {
+        fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
             let pretty_display = match cfg.retrieve_argument("-q") {
                 Some(_) => "",
                 None => "The sum is ",
             };
             let sum: f32 = verbs.filter_map(|x| x.parse::<f32>().ok()).sum();
             println!("{pretty_display}{sum}");
+
+            Ok(())
         }
     }
 }
@@ -80,8 +91,7 @@ use std::env;
 use app::App;
 use modcmd::Module;
 
-// TODO: Create tests for the modules and commands
-fn main() {
+fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let mut topmod = Module::new("App", "App description"); // Maybe? why not?
@@ -97,14 +107,12 @@ fn main() {
     let args = env::args().skip(1);
     let app = App::new(args, topmod);
 
-    // TODO: This needs to be a result
-    let app_result = app.run();
-    for r_verb in app_result.remaining_verbs() {
-        eprintln!("Remaining_verbs (good): {r_verb}");
-    }
+    let app_result = app.run()?;
 
     for (key, arg) in app_result.unused_arguments().iter() {
         eprintln!("Useless parameter: ({key})");
         log::debug!("Useless ArgEntry:\n{arg:?}\n---");
     }
+
+    Ok(())
 }
