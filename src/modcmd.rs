@@ -31,8 +31,9 @@ impl Module {
         }
     }
 
-    pub fn register(&mut self, cmd: Box<dyn Command>) {
-        self.cmds.push(cmd);
+    pub fn register<C: Command + 'static>(&mut self, cmd: C) -> &mut Self {
+        self.cmds.push(Box::new(cmd));
+        self
     }
 
     // TODO: Maybe this should just be the Display trait

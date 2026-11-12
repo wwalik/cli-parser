@@ -65,23 +65,26 @@ mod commands {
         }
     }
 
-    pub struct MathSum;
-    impl Command for MathSum {
-        fn name(&self) -> &str {
-            "sum"
-        }
-        fn desc(&self) -> &str {
-            "sum all its arguments"
-        }
-        fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
-            let pretty_display = match cfg.retrieve_argument("-q") {
-                Some(_) => "",
-                None => "The sum is ",
-            };
-            let sum: f32 = verbs.filter_map(|x| x.parse::<f32>().ok()).sum();
-            println!("{pretty_display}{sum}");
+    pub mod math {
+        use super::*;
+        pub struct Sum;
+        impl Command for Sum {
+            fn name(&self) -> &str {
+                "sum"
+            }
+            fn desc(&self) -> &str {
+                "sum all its arguments"
+            }
+            fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
+                let pretty_display = match cfg.retrieve_argument("-q") {
+                    Some(_) => "",
+                    None => "The sum is ",
+                };
+                let sum: f32 = verbs.filter_map(|x| x.parse::<f32>().ok()).sum();
+                println!("{pretty_display}{sum}");
 
-            Ok(())
+                Ok(())
+            }
         }
     }
 }
@@ -91,22 +94,24 @@ use std::env;
 use app::App;
 use modcmd::Module;
 
+fn create_topmod() -> Module {
+    let mut submod = Module::new("math", "do math");
+    submod.register(commands::math::Sum);
+
+    let mut topmod = Module::new("App", "App description"); // Maybe? why not?
+    topmod
+        .register(commands::Version)
+        .register(commands::Echo)
+        .register(commands::Hi)
+        .register(submod);
+
+    topmod
+}
+
 fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut topmod = Module::new("App", "App description"); // Maybe? why not?
-    topmod.register(Box::from(commands::Version)); // TODO: I hate this syntax :(
-    topmod.register(Box::from(commands::Echo));
-    topmod.register(Box::from(commands::Hi));
-
-    let mut submod = Module::new("math", "do math");
-    submod.register(Box::from(commands::MathSum));
-
-    topmod.register(Box::from(submod));
-
-    let args = env::args().skip(1);
-    let app = App::new(args, topmod);
-
+    let app = App::new(env::args().skip(1), create_topmod());
     let app_result = app.run()?;
 
     for (key, arg) in app_result.unused_arguments().iter() {
