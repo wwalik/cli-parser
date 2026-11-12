@@ -10,9 +10,6 @@ pub trait Command {
     // fn long_desc(&self) -> Option<&str> {
     //     None
     // }
-    fn help(&self) {
-        println!("Mystere et boule de gomme");
-    }
     fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> anyhow::Result<()>;
 }
 

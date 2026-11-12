@@ -70,12 +70,6 @@ mod commands {
             fn desc(&self) -> &str {
                 "sum all its arguments"
             }
-            fn help(&self) {
-                println!(
-                    "Usage: sum <arg0> <arg1> <arg2> <arg...>
-pssss. -q makes me quiet"
-                );
-            }
             fn execute(&self, cfg: &Cfg, verbs: &mut dyn Iterator<Item = &String>) -> Result<()> {
                 let pretty_display = match cfg.retrieve_argument("-q") {
                     Some(_) => "",
