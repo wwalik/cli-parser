@@ -1,6 +1,7 @@
 pub mod cli {
     pub mod app;
     pub use app::App;
+    pub use app::AppSuccess;
 
     pub mod config;
     pub use config::AppConfig;
@@ -8,5 +9,6 @@ pub mod cli {
 
     pub mod modcmd;
     pub use modcmd::Command;
+    pub use modcmd::ExecuteResult;
     pub use modcmd::Module;
 }

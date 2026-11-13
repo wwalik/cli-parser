@@ -4,7 +4,7 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use super::app::AppResult;
+use crate::cli::AppSuccess;
 
 /// Represents an entry into the flag database.
 #[derive(Debug)]
@@ -25,15 +25,15 @@ impl FlagEntry {
         }
     }
 
-    /// Returns the complement
+    /// Returns the operand
     ///
     /// # Examples
     ///
     /// ```
-    /// # use doku::cli::Cfg;
-    /// let complement = "fish";
-    /// let cfg = Cfg::parse("--param {complement}".split(" "));
-    /// assert_eq!(cfg.retrieve_argument("--param").unwrap().complement().unwrap(), "{complement}");
+    /// # use doku::cli::AppConfig;
+    /// let operand = "fish";
+    /// let cfg = AppConfig::parse("--param {operand}".split(" "));
+    /// assert_eq!(cfg.retrieve_argument("--param").unwrap().operand().unwrap(), "{operand}");
     /// ```
     pub fn operand(&self) -> Option<&String> {
         self.operand.as_ref()
@@ -44,8 +44,8 @@ impl FlagEntry {
     /// # Examples
     ///
     /// ```
-    /// # use doku::cli::Cfg;
-    /// let cfg = Cfg::parse("-q -q".split(" "));
+    /// # use doku::cli::AppConfig;
+    /// let cfg = AppConfig::parse("-q -q".split(" "));
     /// assert_eq!(cfg.retrieve_argument("-q").unwrap().strength(), 2);
     /// ```
     pub fn strength(&self) -> u8 {
@@ -57,8 +57,8 @@ impl FlagEntry {
     /// # Examples
     ///
     /// ```
-    /// # use doku::cli::Cfg;
-    /// let cfg = Cfg::parse("-q".split(" "));
+    /// # use doku::cli::AppConfig;
+    /// let cfg = AppConfig::parse("-q".split(" "));
     /// cfg.retrieve_argument("-q");
     /// cfg.retrieve_argument("-q");
     /// let arg = cfg.retrieve_argument("-q").unwrap();
@@ -137,11 +137,13 @@ impl From<Param> for String {
     }
 }
 
+pub type VerbsDb = Vec<String>;
+
 // Ex: doku version -q --kitten meow -> Cfg{ verbs: ["version"], options: {"-q": None, "meow": Some("Kitten")}}
 #[derive(Debug)]
 pub struct AppConfig {
-    /// Every word in the arguments list that doesn't start with a -
-    verbs: Vec<String>,
+    /// Every word in the arguments list that doesn't start with a - or --
+    verbs: VerbsDb,
     flags_db: FlagsDb, // {"-q": None, "--ip": Some("192.168.1.25")}
 }
 
@@ -149,7 +151,7 @@ impl AppConfig {
     pub fn parse(args: impl Iterator<Item = impl ToString>) -> Self {
         let mut args = args.map(|s| s.to_string());
 
-        let mut verbs: Vec<String> = vec![];
+        let mut verbs = VerbsDb::new();
         let mut flags_db = FlagsDb::new();
 
         // TODO: Clean up this loop with a param enum type
@@ -161,8 +163,8 @@ impl AppConfig {
             }
 
             if s.starts_with("--") {
-                let complement = args.next().map(|x| x.to_string());
-                flags_db.register(s, complement);
+                let operand = args.next().map(|x| x.to_string());
+                flags_db.register(s, operand);
             } else if s.starts_with('-') {
                 for c in s.chars().skip(1) {
                     flags_db.register(format!("-{c}"), None);
@@ -189,14 +191,14 @@ impl AppConfig {
         self.flags_db.get(&param)
     }
 
-    pub fn transform_app_result(mut self, remaining_verbs: Vec<String>) -> AppResult {
+    pub fn transform_app_result(self, remaining_verbs: Vec<String>) -> AppSuccess {
         let useless_flags = self
             .flags_db
             .hashmap
-            .drain()
-            .filter(|(_key, flag)| flag.retrieve_count() == 0)
+            .into_values()
+            .filter(|flag| flag.retrieve_count() == 0)
             .collect();
-        AppResult {
+        AppSuccess {
             remaining_verbs,
             useless_flags,
         }

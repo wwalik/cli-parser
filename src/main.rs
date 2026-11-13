@@ -1,7 +1,5 @@
 mod commands {
-    use anyhow::Result;
-
-    use doku::cli::{AppConfig, Command, FlagEntry};
+    use doku::cli::{AppConfig, Command, ExecuteResult, FlagEntry};
 
     pub struct Version;
     impl Command for Version {
@@ -14,8 +12,8 @@ mod commands {
         fn execute(
             &self,
             cfg: &AppConfig,
-            _verbs: &mut dyn Iterator<Item = &String>,
-        ) -> Result<()> {
+            verbs: &mut dyn Iterator<Item = &String>,
+        ) -> ExecuteResult {
             let version = env!("CARGO_PKG_VERSION");
             let pretty_display = match cfg.retrieve_argument("-q").map(FlagEntry::strength) {
                 None => "The current version is ",
@@ -24,7 +22,8 @@ mod commands {
             };
 
             println!("{pretty_display}{version}");
-            Ok(())
+
+            Ok(verbs.cloned().collect())
         }
     }
 
@@ -40,12 +39,12 @@ mod commands {
             &self,
             _cfg: &AppConfig,
             verbs: &mut dyn Iterator<Item = &String>,
-        ) -> Result<()> {
+        ) -> ExecuteResult {
             for verb in verbs {
                 print!("{verb}");
             }
 
-            Ok(())
+            Ok(vec![])
         }
     }
 
@@ -60,10 +59,11 @@ mod commands {
         fn execute(
             &self,
             _cfg: &AppConfig,
-            _verbs: &mut dyn Iterator<Item = &String>,
-        ) -> anyhow::Result<()> {
+            verbs: &mut dyn Iterator<Item = &String>,
+        ) -> ExecuteResult {
             println!("hi");
-            Ok(())
+
+            Ok(verbs.cloned().collect())
         }
     }
 
@@ -81,7 +81,7 @@ mod commands {
                 &self,
                 cfg: &AppConfig,
                 verbs: &mut dyn Iterator<Item = &String>,
-            ) -> Result<()> {
+            ) -> ExecuteResult {
                 let pretty_display = match cfg.retrieve_argument("-q") {
                     Some(_) => "",
                     None => "The sum is ",
@@ -89,7 +89,7 @@ mod commands {
                 let sum: f32 = verbs.filter_map(|x| x.parse::<f32>().ok()).sum();
                 println!("{pretty_display}{sum}");
 
-                Ok(())
+                Ok(verbs.cloned().collect())
             }
         }
     }
@@ -120,12 +120,5 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let app = App::new(env::args().skip(1), create_topmod());
-    let app_result = app.run()?;
-
-    for (key, arg) in app_result.useless_flags.iter() {
-        eprintln!("Useless parameter: ({key})");
-        log::debug!("Useless ArgEntry:\n{arg:?}\n---");
-    }
-
-    Ok(())
+    app.run().map(|app_success| app_success.log())
 }

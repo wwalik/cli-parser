@@ -1,4 +1,14 @@
-use super::config::*;
+use super::config;
+use super::config::AppConfig;
+
+pub type ExecuteResult = anyhow::Result<config::VerbsDb>;
+
+// impl ExecuteResult {
+//     fn new<'a>(verbs: impl Iterator<Item = &'a String>) -> Self {
+//         let verbs = verbs.cloned();
+//         Self(Ok(verbs.collect()))
+//     }
+// }
 
 pub trait Command {
     fn name(&self) -> &str;
@@ -10,11 +20,7 @@ pub trait Command {
     // fn long_desc(&self) -> Option<&str> {
     //     None
     // }
-    fn execute(
-        &self,
-        cfg: &AppConfig,
-        verbs: &mut dyn Iterator<Item = &String>,
-    ) -> anyhow::Result<()>;
+    fn execute(&self, cfg: &AppConfig, verbs: &mut dyn Iterator<Item = &String>) -> ExecuteResult;
 }
 
 pub struct Module {
@@ -23,6 +29,7 @@ pub struct Module {
     // TODO: long_desc: String
     cmds: Vec<Box<dyn Command>>,
 }
+
 impl Module {
     pub fn new(name: &str, desc: &str) -> Self {
         let name = name.to_owned();
@@ -61,18 +68,14 @@ impl Command for Module {
         &self.desc
     }
 
-    fn execute(
-        &self,
-        cfg: &AppConfig,
-        verbs: &mut dyn Iterator<Item = &String>,
-    ) -> anyhow::Result<()> {
+    fn execute(&self, cfg: &AppConfig, verbs: &mut dyn Iterator<Item = &String>) -> ExecuteResult {
         let verb = verbs.next().map_or("", String::as_str);
 
         match self.cmds.iter().find(|&cmd| cmd.name() == verb) {
             Some(cmd) => cmd.execute(cfg, verbs),
             None => {
                 self.help();
-                Ok(()) // TODO: Should this be an Err? self.help() already handles this..?
+                Ok(verbs.cloned().collect())
             }
         }
     }

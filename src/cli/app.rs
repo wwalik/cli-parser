@@ -1,16 +1,32 @@
 use std::fmt;
 
-use super::config::{AppConfig, FlagEntry};
-use super::modcmd::Command;
+use crate::cli::{AppConfig, Command, FlagEntry, Module};
 
-pub struct AppResult {
+pub struct AppSuccess {
     pub remaining_verbs: Vec<String>,
-    pub useless_flags: Vec<(String, FlagEntry)>,
+    pub useless_flags: Vec<FlagEntry>,
 }
 
-impl fmt::Display for AppResult {
+impl AppSuccess {
+    pub fn log(&self) {
+        let AppSuccess {
+            useless_flags,
+            remaining_verbs,
+        } = self;
+
+        useless_flags
+            .iter()
+            .for_each(|flag| log::warn!("Useless Flag: {flag:?}"));
+
+        remaining_verbs
+            .iter()
+            .for_each(|verb| log::warn!("Useless verb: {verb}"));
+    }
+}
+
+impl fmt::Display for AppSuccess {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let AppResult {
+        let AppSuccess {
             remaining_verbs,
             useless_flags: unused_arguments,
         } = self;
@@ -20,15 +36,15 @@ impl fmt::Display for AppResult {
 }
 pub struct App {
     cfg: AppConfig,
-    topmod: super::modcmd::Module,
+    topmod: Module,
 }
 
 impl App {
-    pub fn new(args: impl Iterator<Item = String>, topmod: super::modcmd::Module) -> Self {
+    pub fn new(args: impl Iterator<Item = String>, topmod: Module) -> Self {
         let cfg = AppConfig::parse(args);
         Self { cfg, topmod }
     }
-    pub fn run(self) -> anyhow::Result<AppResult> {
+    pub fn run(self) -> anyhow::Result<AppSuccess> {
         let mut verbs = self.cfg.verbs();
 
         self.topmod.execute(&self.cfg, &mut verbs)?;
