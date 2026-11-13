@@ -3,13 +3,6 @@ use super::config::AppConfig;
 
 pub type ExecuteResult = anyhow::Result<config::VerbsDb>;
 
-// impl ExecuteResult {
-//     fn new<'a>(verbs: impl Iterator<Item = &'a String>) -> Self {
-//         let verbs = verbs.cloned();
-//         Self(Ok(verbs.collect()))
-//     }
-// }
-
 pub trait Command {
     fn name(&self) -> &str;
     fn desc(&self) -> &str;
@@ -23,14 +16,15 @@ pub trait Command {
     fn execute(&self, cfg: &AppConfig, verbs: &mut dyn Iterator<Item = &String>) -> ExecuteResult;
 }
 
-pub struct Module {
+/// A predefined impl of Command that consists of a list of commands. A "subcommand"
+/// e.g. docker CONTAINER ps
+pub struct MetaCommand {
     name: String,
     desc: String,
-    // TODO: long_desc: String
     cmds: Vec<Box<dyn Command>>,
 }
 
-impl Module {
+impl MetaCommand {
     pub fn new(name: &str, desc: &str) -> Self {
         let name = name.to_owned();
         let desc = desc.to_owned();
@@ -49,18 +43,18 @@ impl Module {
 
     // TODO: Maybe this should just be the Display trait
     fn help(&self) {
-        println!("-- MODULE --");
+        println!("-- META COMMAND --");
         println!("-- {} --", self.name());
         println!("------------");
         println!("{}", self.desc());
         println!("------------");
-        for mod_cmd in &self.cmds {
-            println!("{}", mod_cmd.brief());
+        for cmd in &self.cmds {
+            println!("{}", cmd.brief());
         }
     }
 }
 
-impl Command for Module {
+impl Command for MetaCommand {
     fn name(&self) -> &str {
         &self.name
     }

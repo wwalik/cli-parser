@@ -98,14 +98,14 @@ mod commands {
 use std::env;
 
 use cli_parser::App;
-use cli_parser::Module;
+use cli_parser::MetaCommand;
 
 // TODO: This should really be automated by macros...
-fn create_topmod() -> Module {
-    let mut submod = Module::new("math", "do math");
+fn create_topmod() -> MetaCommand {
+    let mut submod = MetaCommand::new("math", "do math");
     submod.register(commands::math::Sum);
 
-    let mut topmod = Module::new("App", "App description");
+    let mut topmod = MetaCommand::new("App", "App description");
     // TODO: This should also have a macro...
     topmod
         .register(commands::Version)

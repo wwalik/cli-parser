@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{AppConfig, Command, FlagEntry, Module};
+use crate::{AppConfig, Command, FlagEntry, MetaCommand};
 
 pub struct AppSuccess {
     pub remaining_verbs: Vec<String>,
@@ -36,11 +36,11 @@ impl fmt::Display for AppSuccess {
 }
 pub struct App {
     cfg: AppConfig,
-    topmod: Module,
+    topmod: MetaCommand,
 }
 
 impl App {
-    pub fn new(args: impl Iterator<Item = String>, topmod: Module) -> Self {
+    pub fn new(args: impl Iterator<Item = String>, topmod: MetaCommand) -> Self {
         let cfg = AppConfig::parse(args);
         Self { cfg, topmod }
     }

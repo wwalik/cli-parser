@@ -1,7 +1,7 @@
 pub mod cli {
     pub mod app;
+    pub mod command;
     pub mod config;
-    pub mod modcmd;
 }
 
 pub use cli::app::App;
@@ -10,6 +10,6 @@ pub use cli::app::AppSuccess;
 pub use cli::config::AppConfig;
 pub use cli::config::FlagEntry;
 
-pub use cli::modcmd::Command;
-pub use cli::modcmd::ExecuteResult;
-pub use cli::modcmd::Module;
+pub use cli::command::Command;
+pub use cli::command::ExecuteResult;
+pub use cli::command::MetaCommand;
