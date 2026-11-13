@@ -1,5 +1,5 @@
 mod commands {
-    use doku::cli::{AppConfig, Command, ExecuteResult, FlagEntry};
+    use cli_parser::{AppConfig, Command, ExecuteResult, FlagEntry};
 
     pub struct Version;
     impl Command for Version {
@@ -97,8 +97,8 @@ mod commands {
 
 use std::env;
 
-use doku::cli::App;
-use doku::cli::Module;
+use cli_parser::App;
+use cli_parser::Module;
 
 // TODO: This should really be automated by macros...
 fn create_topmod() -> Module {

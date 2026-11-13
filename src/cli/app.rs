@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::cli::{AppConfig, Command, FlagEntry, Module};
+use crate::{AppConfig, Command, FlagEntry, Module};
 
 pub struct AppSuccess {
     pub remaining_verbs: Vec<String>,

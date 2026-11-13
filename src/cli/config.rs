@@ -4,7 +4,7 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use crate::cli::AppSuccess;
+use crate::AppSuccess;
 
 /// Represents an entry into the flag database.
 #[derive(Debug)]
