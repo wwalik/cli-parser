@@ -31,8 +31,9 @@ impl FlagEntry {
     ///
     /// ```
     /// # use doku::cli::AppConfig;
+    /// # use std::fmt::format;
     /// let operand = "fish";
-    /// let cfg = AppConfig::parse("--param {operand}".split(" "));
+    /// let cfg = AppConfig::parse(format!("--param {operand}").split(" "));
     /// assert_eq!(cfg.retrieve_argument("--param").unwrap().operand().unwrap(), "{operand}");
     /// ```
     pub fn operand(&self) -> Option<&String> {
@@ -105,38 +106,6 @@ impl FlagsDb {
     }
 }
 
-pub enum Param {
-    Short(String),
-    Long(String),
-    Verb(String),
-    /// "--" i.e. End of options delimiter
-    EoO,
-}
-
-impl From<String> for Param {
-    fn from(value: String) -> Self {
-        if value.starts_with("--") {
-            Param::Long(value)
-        } else if value.starts_with("-") {
-            assert!(value.len() > 2);
-            Param::Short(value)
-        } else {
-            Param::Verb(value)
-        }
-    }
-}
-
-impl From<Param> for String {
-    fn from(value: Param) -> Self {
-        match value {
-            Param::Short(s) => s,
-            Param::Long(s) => s,
-            Param::Verb(s) => s,
-            Param::EoO => "--".to_owned(),
-        }
-    }
-}
-
 pub type VerbsDb = Vec<String>;
 
 // Ex: doku version -q --kitten meow -> Cfg{ verbs: ["version"], options: {"-q": None, "meow": Some("Kitten")}}
@@ -147,30 +116,49 @@ pub struct AppConfig {
     flags_db: FlagsDb, // {"-q": None, "--ip": Some("192.168.1.25")}
 }
 
+pub enum Parameter {
+    Short(String),
+    Long(String),
+    Verb(String),
+    /// "--" i.e. End of options delimiter
+    EoO,
+}
+
+impl Parameter {
+    // Returns a Vec because -vx is effectively multiple parameters
+    fn create(value: String) -> Vec<Self> {
+        use Parameter::*;
+        if value.as_str() == "--" {
+            vec![EoO]
+        } else if value.starts_with("--") {
+            vec![Long(value)]
+        } else if value.starts_with("-") {
+            value
+                .chars()
+                .skip(1) // Skip -
+                .map(|flag| Short(format!("-{flag}")))
+                .collect()
+        } else {
+            vec![Verb(value)]
+        }
+    }
+}
+
 impl AppConfig {
     pub fn parse(args: impl Iterator<Item = impl ToString>) -> Self {
-        let mut args = args.map(|s| s.to_string());
-
-        let mut verbs = VerbsDb::new();
         let mut flags_db = FlagsDb::new();
+        let mut verbs = VerbsDb::new();
 
-        // TODO: Clean up this loop with a param enum type
-        // e.g. match Param {Short =>, Long =>, Verb =>, EoO => }
-        while let Some(s) = args.next() {
-            if s.as_str() == "--" {
-                verbs.push(args.collect());
-                break;
-            }
-
-            if s.starts_with("--") {
-                let operand = args.next().map(|x| x.to_string());
-                flags_db.register(s, operand);
-            } else if s.starts_with('-') {
-                for c in s.chars().skip(1) {
-                    flags_db.register(format!("-{c}"), None);
+        use Parameter::*;
+        let mut args = args.map(|s| s.to_string());
+        while let Some(param) = args.next() {
+            for flag in Parameter::create(param) {
+                match flag {
+                    Short(flag_name) => flags_db.register(flag_name, None),
+                    Long(flag_name) => flags_db.register(flag_name, args.next()),
+                    Verb(verb) => verbs.push(verb),
+                    EoO => verbs.extend(args.by_ref()),
                 }
-            } else if !s.is_empty() {
-                verbs.push(s);
             }
         }
 
@@ -202,128 +190,5 @@ impl AppConfig {
             remaining_verbs,
             useless_flags,
         }
-    }
-}
-
-// TODO: Make tests exhaustive
-#[cfg(any())]
-mod tests2 {
-    use rand::seq::SliceRandom;
-
-    use super::*;
-
-    #[test]
-    fn double_dash_test() {
-        let cmd = "version -q -- test123 --123test";
-
-        let cfg = AppConfig::parse(cmd.split(" "));
-        println!("{cfg:#?}");
-
-        assert_eq!(
-            cfg.verbs().collect::<Vec<&String>>(),
-            vec!["version", "test123", "--123test"]
-        );
-    }
-    // ------------------------ Retrieving -------------------------
-    #[test]
-    fn retrieve_count_test() {
-        let cmd = "blabla -q";
-
-        let cfg = AppConfig::parse(cmd.split(" "));
-
-        cfg.retrieve_argument("-q");
-        cfg.retrieve_argument("-q");
-
-        let entry = cfg.retrieve_argument("-q").unwrap();
-        assert_eq!(entry.retrieve_count(), 3)
-    }
-
-    // ------------------------ PARSING -------------------------
-    fn gen_verbs() -> Vec<String> {
-        let v = ["firstverb", "secondverb"];
-
-        v.iter().map(|s| s.to_string()).collect()
-    }
-    fn gen_shorts() -> Vec<(String, Option<String>)> {
-        let v = ["-q", "-vx", "-é"];
-
-        v.iter().map(|s| (s.to_string(), None)).collect()
-    }
-    fn gen_longs() -> Vec<(String, Option<String>)> {
-        let v = [("--long", "complement"), ("--kitten", "meow")];
-
-        v.iter()
-            .map(|s| (s.0.to_string(), Some(s.1.to_string())))
-            .collect()
-    }
-
-    #[test]
-    fn general_config_parsing_test() {
-        let verbs = gen_verbs();
-        let shorts = gen_shorts();
-        let longs = gen_longs();
-
-        let mut params: Vec<String> = [shorts.clone(), longs.clone()]
-            .concat()
-            .iter()
-            .map(|s| {
-                let s0 = s.0.clone();
-                match &s.1 {
-                    Some(s1) => s0 + " " + s1.as_str(),
-                    None => s0,
-                }
-            })
-            .collect();
-        params.shuffle(&mut rand::rng());
-
-        let cmd: Vec<String> = [verbs.clone(), params]
-            .concat()
-            .join(" ")
-            .split(" ")
-            .map(str::to_string)
-            .collect();
-        println!("The config will parse this command: \n{cmd:?}\n---");
-
-        let cfg = AppConfig::parse(cmd.iter());
-        println!("This is the parsed config: \n{cfg:#?}\n---");
-
-        // Verify verbs
-        verbs
-            .iter()
-            .zip(cfg.verbs.iter())
-            .for_each(|(v, v_parsed)| {
-                assert_eq!(*v, *v_parsed);
-            });
-
-        // Verify shorts
-        for (param, _) in shorts {
-            println!("{param}");
-            for c in param.chars().skip(1) {
-                println!("-{c}");
-                assert!(cfg.retrieve_argument(format!("-{c}").as_str()).is_some());
-            }
-        }
-
-        // Verify longs
-        for (param, complement_wrapped) in longs {
-            let complement = complement_wrapped.expect("Should have complement");
-
-            let entry = cfg
-                .retrieve_argument(param.as_str())
-                .expect("Should have found ArgEntry for {param}");
-            assert_eq!(
-                entry
-                    .value()
-                    .expect("Long options should have values")
-                    .as_str(),
-                complement.as_str()
-            );
-        }
-    }
-    // TODO:
-    #[ignore = "Unimplemented"]
-    #[test]
-    fn general_config_parsing_failure() {
-        unimplemented!()
     }
 }
